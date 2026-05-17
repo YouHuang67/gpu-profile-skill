@@ -42,6 +42,11 @@ FRAMEWORK_REGISTRY = {
         "kernel_decorators": [],
         "label": "CuPy",
     },
+    "native": {
+        "imports": ["ctypes", "cffi"],
+        "kernel_decorators": [],
+        "label": "Native .so / ctypes",
+    },
     "torch_jit": {
         "imports": ["torch.utils.cpp_extension"],
         "kernel_decorators": [],
@@ -52,10 +57,25 @@ FRAMEWORK_REGISTRY = {
         "kernel_decorators": [],
         "label": "PyTorch CUDA",
     },
-    "native": {
-        "imports": ["ctypes", "cffi"],
+    "triton_aot": {
+        "imports": [],
         "kernel_decorators": [],
-        "label": "Native .so / ctypes",
+        "label": "Triton AOT (triton.compile)",
+    },
+    "jax": {
+        "imports": ["jax"],
+        "kernel_decorators": [],
+        "label": "JAX",
+    },
+    "tensorrt": {
+        "imports": ["tensorrt"],
+        "kernel_decorators": [],
+        "label": "TensorRT",
+    },
+    "tensorflow": {
+        "imports": ["tensorflow"],
+        "kernel_decorators": [],
+        "label": "TensorFlow",
     },
 }
 
@@ -214,14 +234,24 @@ def _detect_frameworks(tree: ast.Module, source: str = "") -> list[str]:
                 detected.append("numba_cuda")
             elif "pycuda" in source:
                 detected.append("pycuda")
-        if any(kw in source for kw in ["load_inline", "cpp_extension", "load_library"]):
+        if any(kw in source for kw in ["load_inline", "cpp_extension", "load_library",
+                                         "CUDAExtension"]):
             detected.append("torch_jit")
         if any(kw in source for kw in ["RawKernel", "RawModule"]):
             detected.append("cupy")
         if any(kw in source for kw in ["T.prim_func", "T.macro"]):
             detected.append("tilelang")
-        if any(kw in source for kw in ["ctypes.CDLL", "cdll.LoadLibrary"]):
+        if any(kw in source for kw in ["ctypes.CDLL", "cdll.LoadLibrary",
+                                         "ffi.dlopen"]):
             detected.append("native")
+        if any(kw in source for kw in ["triton.compile"]):
+            detected.append("triton_aot")
+        if any(kw in source for kw in ["jax.custom_call", "register_custom_call_target"]):
+            detected.append("jax")
+        if any(kw in source for kw in ["tensorrt.Builder"]):
+            detected.append("tensorrt")
+        if any(kw in source for kw in ["tf.load_op_library"]):
+            detected.append("tensorflow")
 
     return detected if detected else ["torch_cuda"]
 

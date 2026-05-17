@@ -6,7 +6,7 @@ SKILLS_SRC="${SCRIPT_DIR}/skills"
 SKILLS_DST=""
 TARGET="claude"
 
-SKILL_DIRS=(ncu-profile nsys-profile profile gpu-scripts gpu-refs)
+SKILL_DIRS=(ncu-profile nsys-profile profile)
 
 usage() {
     cat <<EOF

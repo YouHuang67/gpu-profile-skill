@@ -1,0 +1,1 @@
+../../shared/scripts/detect_entry.py

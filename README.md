@@ -119,20 +119,30 @@ The entry detector (`detect_entry.py`) auto-classifies the file as runnable, cal
 
 ```
 skills/
-├── ncu-profile/SKILL.md        # /ncu-profile command
-├── nsys-profile/SKILL.md       # /nsys-profile command
-├── profile/SKILL.md            # /profile command (NCU + NSYS)
-├── gpu-refs/                   # Shared docs: metrics + bottleneck mapping
-│   ├── ncu_metrics.md
-│   ├── nsys_metrics.md
-│   └── bottleneck_patterns.md
-└── gpu-scripts/                # Shared Python tools
-    ├── detect_entry.py         # Multi-framework AST entry detection
-    ├── run_ncu.py              # NCU execution + metric extraction + roofline
-    └── run_nsys.py             # NSYS execution + timeline parsing + SQLite
+├── ncu-profile/
+│   ├── SKILL.md
+│   ├── scripts/                # -> ../../shared/scripts/
+│   └── reference/              # -> ../../shared/reference/
+├── nsys-profile/
+│   ├── SKILL.md
+│   ├── scripts/
+│   └── reference/
+├── profile/
+│   ├── SKILL.md
+│   ├── scripts/
+│   └── reference/
+└── shared/                     # Single source of truth (not installed)
+    ├── scripts/
+    │   ├── detect_entry.py
+    │   ├── run_ncu.py
+    │   └── run_nsys.py
+    └── reference/
+        ├── bottleneck_patterns.md
+        ├── ncu_metrics.md
+        └── nsys_metrics.md
 ```
 
-Each skill directory contains a single `SKILL.md`. Shared resources (`gpu-refs/`, `gpu-scripts/`) have no `SKILL.md` so the agent ignores them as commands, while keeping them accessible internally via `../gpu-refs/` and `../gpu-scripts/` paths.
+Each skill is self-contained per the Agent Skills standard. Scripts and docs live once in `shared/` and are symlinked into each skill. SKILL.md uses clean relative paths: `scripts/run_ncu.py`, `reference/ncu_metrics.md`.
 
 ## Supported Frameworks
 

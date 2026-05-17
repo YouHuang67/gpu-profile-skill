@@ -15,38 +15,32 @@ triggers:
   - coalescing check
 ---
 
-# NCU Profile — GPU Kernel Hardware Bottleneck Analysis
+# NCU Profile
 
-Run NCU profiling on a GPU kernel, interpret hardware metrics, and present a clear bottleneck analysis.
+Run NCU profiling on a GPU kernel, interpret hardware metrics, present bottleneck analysis.
 
-**Rule**: Only run profiling when the user explicitly asks. Do NOT suggest it unprompted.
-When a file path is unclear, ask the user to specify.
+**Rule**: Only profile when user explicitly asks. Do not suggest unprompted.
 
-## Common Blockers (check before profiling)
+## Common Blockers
 
 ### Sudo / GPU Permission
-
-NCU reads hardware performance counters. Check permission:
-
 ```bash
 cat /proc/driver/nvidia/params 2>/dev/null | grep RmProfilingAdminOnly
 ```
+| Output | Action |
+|--------|--------|
+| `RmProfilingAdminOnly: 0` | Proceed |
+| `RmProfilingAdminOnly: 1` | Script auto-uses sudo |
+| File unreadable | Assume sudo needed |
 
-| Output | Meaning | Action |
-|--------|---------|--------|
-| `RmProfilingAdminOnly: 0` | No restriction | Proceed |
-| `RmProfilingAdminOnly: 1` | Root-only | Script auto-uses `sudo ncu`; user may need to enter password |
-| File unreadable | Unknown | Assume sudo needed |
-
-Permanent fix (requires reboot):
+Permanent fix (reboot required):
 ```bash
 echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf
 sudo update-initramfs -u && sudo reboot
 ```
 
-### NCU Binary Location
-
-Auto-search order: `$CUDA_HOME/bin/ncu` -> PATH -> `/usr/local/cuda/bin/ncu` -> `/usr/local/cuda-{12.8..11.8}/bin/ncu`.
+### NCU Binary
+Auto-search: `$CUDA_HOME/bin/ncu` -> PATH -> `/usr/local/cuda/bin/ncu` -> `/usr/local/cuda-*/bin/ncu`.
 
 ```bash
 python -c "
@@ -62,29 +56,26 @@ for v in ['12.8','12.6','12.4','12.2','12.0','11.8']:
 If not found: install [Nsight Compute](https://developer.nvidia.com/nsight-compute) or pass `--ncu /path/to/ncu`.
 
 ## Step 1: Environment Check
-
 ```bash
-python -c "import torch; print('CUDA:', torch.cuda.is_available()); d=torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A'; print('Device:', d)"
+python -c "import torch; print('CUDA:', torch.cuda.is_available()); print('Device:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A')"
 nvidia-smi --query-gpu=name,memory.total,compute_cap --format=csv,noheader
 ```
 
 ## Step 2: Detect Entry Point
-
 ```bash
-python ${CLAUDE_SKILL_DIR}/../gpu-scripts/detect_entry.py "$ARGUMENTS" --json
+python scripts/detect_entry.py "$ARGUMENTS" --json
 ```
 
 | Result | Meaning | Action |
 |--------|---------|--------|
-| `error` | File issue | Report error, stop |
-| `main_block` | Runnable script | Use as-is |
-| `callable` | Has launch functions, no `__main__` | Generate wrapper at `/tmp/gpu_profile_*/wrapper.py`, confirm inputs |
-| `kernel_only` | Only kernel definitions, or no Python decorators (JIT/C++ kernel) | For JIT: NCU captures all CUDA launches regardless; proceed. Kernel name filters may need to match mangled/template names. |
+| `error` | File issue | Report, stop |
+| `main_block` | Runnable | Use as-is |
+| `callable` | Has launch functions | Generate wrapper, confirm inputs |
+| `kernel_only` | Only kernels, or JIT/pre-compiled (no Python decorator) | NCU captures all CUDA launches. Proceed directly. |
 
 ## Step 3: Run NCU
-
 ```bash
-python ${CLAUDE_SKILL_DIR}/../gpu-scripts/run_ncu.py \
+python scripts/run_ncu.py \
     <script> \
     -o /tmp/gpu_profile_ncu_$(date +%s) \
     --python "$(which python)" \
@@ -92,97 +83,53 @@ python ${CLAUDE_SKILL_DIR}/../gpu-scripts/run_ncu.py \
 ```
 
 Options:
-- Explicit NCU path: `--ncu /usr/local/cuda-12.4/bin/ncu`
-- NVTX (skip autotune warmup): `--nvtx-include "profile_target"`
-  The test script must wrap the target with: `with torch.cuda.nvtx.range("profile_target"): kernel(...)`
-- Kernel filter: `-k "kernel_name"` — regex matches kernel names. For JIT kernels, names include template params like `void det_attn_bwd_dkv_kernel<(int)64,...>`. Use a short substring match (e.g. `-k "det_attn_bwd"`).
-- Launch control: `-s N -n M` — skip N global launches, profile M. These are GLOBAL counts: in mixed PyTorch+JIT workloads, PyTorch internal launches also count. Prefer NVTX over `-s`/`-n` for JIT.
-- Detail level: `--page details` for per-metric text output (slower but complete). Default is `--page raw` (CSV section summary, fast).
-
-Output: `.ncu-rep` (GUI-openable) + metrics JSON to stdout.
+- Explicit NCU: `--ncu /usr/local/cuda-12.4/bin/ncu`
+- NVTX skip warmup: `--nvtx-include "profile_target"`
+- Kernel filter: `-k "kernel_name"` (for JIT use short substring, names include template params like `void kernel<(int)64,...>`)
+- Launch control `-s N -n M` are GLOBAL counts. PyTorch internal launches also count. Prefer NVTX over `-s`/`-n` for JIT.
+- Detail level: `--page details` for per-metric text (complete), default `--page raw` for CSV summary (fast).
 
 ## Step 4: Error Handling
-
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | Permission denied | RmProfilingAdminOnly=1 | Use sudo or permanent fix |
-| No .ncu-rep produced | No CUDA kernel launched | Verify script runs GPU kernels |
-| "No kernels were profiled" with `-k` | Regex didn't match JIT kernel name | Drop `-k`, run without filter, then filter by name in results. Use `--kernel-name-filter` in post-processing instead. |
-| Timed out (300s) | Profiling too slow | `--timeout 600` or reduce data |
-| Module not found | Wrong Python env | Verify Python env, dependencies |
-| exit 137 (OOM) | Too much memory | Reduce input tensor sizes |
-| ncu: command not found | NCU not installed | Install or `--ncu` flag |
-| `-s`/`-n` skip target kernel | Global launch count includes PyTorch internal ops | Don't use `-s`/`-n` for JIT workloads. Use NVTX or skip filtering and profile all. |
+| No .ncu-rep | No kernel launched | Verify script runs GPU kernels |
+| "No kernels profiled" with `-k` | Regex didn't match JIT name | Drop `-k`, profile all, filter in results |
+| `-s`/`-n` skip target | Global count includes PyTorch ops | Don't use `-s`/`-n` for JIT. Use NVTX. |
+| Timed out | Too slow | `--timeout 600` or reduce data |
+| Module not found | Wrong env | Verify Python env, deps |
+| exit 137 | OOM | Reduce tensor sizes |
 
 ## Step 5: Analyze Results
 
-Read the JSON output. When `--page raw` gives only section-level summaries and you need per-metric breakdown, re-run with `--page details` to get full text output with individual metric values.
+When `--page raw` gives only section summaries, re-run with `--page details` for per-metric breakdown.
 
-Present in this structure:
+### 1. Roofline
+- Memory Bound: memory_sol >= compute_sol
+- Compute Bound: compute_sol > memory_sol
+- Underutilized: both < 60%
 
-### 1. Roofline Classification
-
-| Bottleneck | Condition |
-|------------|-----------|
-| Memory Bound | memory_sol >= compute_sol |
-| Compute Bound | compute_sol > memory_sol |
-| Underutilized | both < 60% |
-
-Include SOL %, headroom %, tensor core active status.
-
-### 2. Metric Groups
-
-For each of the 10 groups below, show `| Metric | Value | Interpretation |`.
-Interpret values using `${CLAUDE_SKILL_DIR}/../gpu-refs/ncu_metrics.md`.
-
-1. **Speed of Light (SOL)** — roofline overview
-2. **SM & Compute Utilization** — FP32/tensor/LSU pipe usage
-3. **DRAM (HBM)** — bandwidth, bytes read/written
-4. **L2 Cache** — hit rate, throughput
-5. **L1/TEX Cache** — hit rate, shared memory wavefronts
-6. **Global Memory Access** — sectors/request, coalescing, branch divergence
-7. **Occupancy & Resources** — limiter (registers/shared_mem/warps)
-8. **Launch Configuration** — block/grid size, registers, shared mem, waves/SM
-9. **Stall Analysis** — memory_dependency, scoreboard, barrier, branch
-10. **Timing** — duration, active time
+### 2. Metric Groups (10 groups)
+Interpret with `reference/ncu_metrics.md`.
+1. Speed of Light (SOL)  6. Global Memory Access
+2. SM & Compute           7. Occupancy & Resources
+3. DRAM (HBM)           8. Launch Configuration
+4. L2 Cache              9. Stall Analysis
+5. L1/TEX Cache         10. Timing
 
 ### 3. Derived Metrics
-
-- **Global Load Sectors/Request**: 1.0 = perfect, >4 = waste, 32 = worst
-- **Global Store Sectors/Request**: same scale
-- **L2 Hit Rate** (computed): cross-check with reported
-- **DRAM Bandwidth (GB/s)**: compare with GPU peak
-- **Kernel Duration (ms)**: absolute time
+- Global Load/Store Sectors/Request (1=perfect, >4=waste, 32=worst)
+- L2 Hit Rate, DRAM Bandwidth (GB/s), Kernel Duration (ms)
 
 ### 4. Code-Level Mapping
-
-Read kernel source. Map findings to specific code using `${CLAUDE_SKILL_DIR}/../gpu-refs/bottleneck_patterns.md`.
-
-For each major finding:
-- Quote the relevant code section
-- Explain what metrics suggest about that code
-- State confidence: **certain** / **likely** / **speculative**
-
-GPU DSL compilers (Triton/Numba/TileLang/nvcc) and JIT paths (load_inline/cpp_extension) transform code through multiple passes, so exact source-to-SASS mapping is imprecise.
+Map to source with `reference/bottleneck_patterns.md`. State confidence: certain / likely / speculative.
 
 ### 5. Key Findings
-
-Top 3-5 findings ordered by estimated impact:
-
-1. **What**: the bottleneck
-2. **Evidence**: specific metric values
-3. **Where**: code location if identifiable
-4. **Impact**: High / Medium / Low
+Top 3-5 by impact. Each: What + Evidence + Where + Impact (High/Medium/Low).
 
 **Do NOT suggest fixes unless asked.**
 
 ## Follow-Up
-
-After presenting results, offer:
-- "Open `.ncu-rep` in Nsight Compute GUI?" (give path)
-- "Re-run with NVTX to isolate a specific kernel?"
-- "Re-run with `--page details` for per-metric breakdown?"
-- "Run `/nsys-profile` for timeline and GPU utilization data?"
-- "Dive deeper into any metric group?"
-
-Always report the `.ncu-rep` path for GUI inspection.
+- "Open `.ncu-rep` in GUI?" (give path)
+- "Re-run with `--page details` for full breakdown?"
+- "Run `/nsys-profile` for timeline data?"
