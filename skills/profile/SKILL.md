@@ -22,7 +22,8 @@ Orchestrates NCU (hardware counters) + NSYS (timeline) for complete performance 
 ```bash
 cat /proc/driver/nvidia/params 2>/dev/null | grep RmProfilingAdminOnly
 ```
-If `RmProfilingAdminOnly: 1`: auto-sudo. Permanent: `echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf && sudo update-initramfs -u && sudo reboot`
+If `RmProfilingAdminOnly: 1`: auto-sudo. Permanent: `echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf && sudo update-initramfs -u
+sudo reboot`
 
 ### NCU/NSYS Binaries
 ```bash

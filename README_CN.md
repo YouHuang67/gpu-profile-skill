@@ -48,10 +48,16 @@ NCU 读取 GPU 硬件性能计数器需要 root 权限，做一次永久配置�
 
 ```bash
 echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf
-sudo update-initramfs -u && sudo reboot
+sudo update-initramfs -u
 ```
 
-重启后验证 `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`，期望输出 `0`。如果跳过此配置，profiling 脚本会自动使用 sudo。
+然后**重启系统**：
+
+```bash
+sudo reboot
+```
+
+重启后验证 `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`，期望输出 `0`。如果跳过此配置，profiling 脚本每次 NCU 调用时会自动使用 sudo。
 
 <h3>安装</h3>
 

@@ -48,10 +48,16 @@ NCU reads GPU hardware performance counters, which default to root-only. Fix onc
 
 ```bash
 echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf
-sudo update-initramfs -u && sudo reboot
+sudo update-initramfs -u
 ```
 
-Verify with `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`. Expected output: `0`. If skipped, profiling scripts auto-use sudo.
+Then **reboot**:
+
+```bash
+sudo reboot
+```
+
+After reboot, verify: `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`. Expected output: `0`. If this step is skipped, profiling scripts auto-use sudo at each NCU invocation.
 
 <h3>Install</h3>
 

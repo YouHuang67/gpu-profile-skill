@@ -216,7 +216,8 @@ do_check() {
             echo "  [WARN]  RmProfilingAdminOnly != 0 — NCU requires sudo"
             echo "          Fix (one-time, needs reboot):"
             echo "            echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf"
-            echo "            sudo update-initramfs -u && sudo reboot"
+            echo "            sudo update-initramfs -u"
+            echo "            sudo reboot"
             echo "          Until then, profiling scripts auto-use sudo (may prompt for password)."
         fi
     elif [ -f /etc/modprobe.d/nvidia-profiling.conf ] && grep -q "NVreg_RestrictProfilingToAdminUsers=0" /etc/modprobe.d/nvidia-profiling.conf 2>/dev/null; then

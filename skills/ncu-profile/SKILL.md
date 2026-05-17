@@ -36,7 +36,8 @@ cat /proc/driver/nvidia/params 2>/dev/null | grep RmProfilingAdminOnly
 Permanent fix (reboot required):
 ```bash
 echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf
-sudo update-initramfs -u && sudo reboot
+sudo update-initramfs -u
+sudo reboot
 ```
 
 ### NCU Binary
