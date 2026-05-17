@@ -7,7 +7,7 @@
 <h1 align="center">GPU Profile Skill</h1>
 
 <p align="center">
-  <b>安装，提问，拿到报告。</b><br>
+  <b>面向 Claude Code 和 Codex 的 GPU kernel 性能分析工具</b><br>
   <sub>NCU 硬件计数器 &middot; NSYS 时间线分析 &middot; Triton &middot; CUDA &middot; TileLang</sub>
 </p>
 
@@ -25,45 +25,15 @@
 
 ---
 
-## 怎么用
+## 概述
 
-对 agent 说 "这个 kernel 好慢，看看瓶颈在哪" 或者 "帮我 profile 一下 attention kernel"。agent 自动检测框架，跑 NCU 和 NSYS，给出结构化报告：roofline 分类、10 组硬件指标、代码级瓶颈映射、按影响排序的关键发现。
+一套 Agent Skills 包，让 coding agent 能够调用 NVIDIA Nsight Compute 和 Nsight Systems 对 GPU kernel 进行性能分析。agent 自动检测 kernel 框架（Triton、CUDA、TileLang 等 12 种），选择合适的 profiling 工具，输出结构化分析报告。
 
-<table>
-<tr>
-  <td width="160"><b>问瓶颈</b></td>
-  <td>"为什么这个 kernel 这么慢"、"吞吐上限在哪"、"是不是 memory bound"</td>
-</tr>
-<tr>
-  <td><b>要 profile</b></td>
-  <td>"profile 一下 attention kernel"、"跑个 NCU"、"检查占用率"</td>
-</tr>
-<tr>
-  <td><b>问具体指标</b></td>
-  <td>"tensor core 利用率多少"、"内存带宽分析"、"stall 分析"</td>
-</tr>
-</table>
-
-agent 知道 NCU 什么时候需要 sudo，autotune 怎么用 NVTX 跳过预热，JIT kernel 名怎么找，怎么把硬件指标映射回源代码。
-
-## 能拿到什么
-
-一次提问，一份结构化报告：
-
-```
-Roofline: memory-bound, Memory SOL 72%, 还有 28% 空间
-
-10 组指标：SOL、计算、DRAM、L1/L2 缓存、合并访问、占用率、
-  launch 配置、stall、耗时
-
-代码级映射：每条发现关联到具体代码行，标注可信度
-
-关键发现：按影响排序的主要瓶颈，每条带具体指标数值作为证据
-```
+agent 负责处理环境检查、sudo 权限检测、CUDA 工具路径发现、kernel 入口识别、profiling 执行、指标解读、代码级瓶颈映射等全流程。
 
 ## 安装
 
-<h3>1. 环境要求</h3>
+<h3>环境要求</h3>
 
 <table>
 <tr><td width="160"><b>NVIDIA GPU</b></td><td>计算能力 7.0+</td></tr>
@@ -72,27 +42,39 @@ Roofline: memory-bound, Memory SOL 72%, 还有 28% 空间
 <tr><td><b>运行环境</b></td><td>Claude Code 或 Codex（Agent Skills 兼容）</td></tr>
 </table>
 
-<h3>2. Sudo（一次性配置）</h3>
+<h3>Sudo 配置（一次性）</h3>
 
-NCU 需要读取 GPU 硬件性能计数器，默认只有 root 能访问。
+NCU 读取 GPU 硬件性能计数器需要 root 权限，做一次永久配置即可：
 
 ```bash
 echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf
 sudo update-initramfs -u && sudo reboot
 ```
 
-重启后验证 `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`，应该输出 `0`。跳过的话 profiling 脚本会自动加 sudo。
+重启后验证 `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`，期望输出 `0`。如果跳过此配置，profiling 脚本会自动使用 sudo。
 
-<h3>3. 安装</h3>
+<h3>安装</h3>
 
 ```bash
 git clone https://github.com/your-org/gpu-profile-skill.git
 cd gpu-profile-skill
-./install.sh check      # 检查 GPU、CUDA、NCU、NSYS、sudo
+./install.sh check      # 检查 GPU、CUDA、NCU、NSYS、sudo 状态
 ./install.sh install     # 软链接到 ~/.claude/skills/
 ```
 
-Codex 用户：`./install.sh install -t codex`（安装到 `.agents/skills/`）。
+Codex 用户：`./install.sh install -t codex`。
+
+## 使用方式
+
+安装后直接对 agent 描述你的需求，agent 会根据意图触发对应的分析流程：
+
+- 性能问题：*"这个 kernel 为什么这么慢"*、*"吞吐上限在哪"*、*"看一下瓶颈"*
+- 分析请求：*"profile 一下 attention kernel"*、*"跑个 NCU"*、*"检查占用率"*
+- 具体指标：*"tensor core 利用率"*、*"内存带宽"*、*"stall 分析"*
+
+agent 输出 roofline 分类、10 组硬件指标、派生指标、带可信度标注的代码级映射、按影响排序的关键发现。
+
+对于 JIT 编译和预编译 kernel（缺少 Python 装饰器的场景），NCU 仍能捕获所有 CUDA launch。agent 在运行时自动发现 kernel 名称，不依赖写死的规则。sandbox 目录下有各类入口模式的参考示例。
 
 ## 支持的框架
 
@@ -107,26 +89,24 @@ Codex 用户：`./install.sh install -t codex`（安装到 `.agents/skills/`）�
 | **预编译 .so** | `ctypes.CDLL`、`import xxx_cuda` |
 | **Triton AOT** | `triton.compile` |
 | **PyTorch CUDA** | `import torch` + CUDA |
-| **JAX, TensorRT, TensorFlow** | 各自框架特有调用 |
-
-JIT 和预编译 kernel 即使没有 Python 装饰器，NCU 也能捕获全部 CUDA launch。agent 会处理 kernel 名发现，不用写死规则。
+| **JAX, TensorRT, TensorFlow** | 框架特有调用 |
 
 ## 项目结构
 
 ```
 skills/
-├── ncu-profile/        # 硬件计数器分析
+├── ncu-profile/        # NCU 硬件计数器分析
 │   ├── SKILL.md
 │   ├── scripts/        # -> ../../shared/scripts/
 │   └── reference/      # -> ../../shared/reference/
-├── nsys-profile/       # 时间线分析
-├── profile/            # NCU + NSYS 组合
-└── shared/             # 源文件（不安装为 skill）
+├── nsys-profile/       # NSYS 时间线分析
+├── profile/            # NCU + NSYS 组合分析
+└── shared/             # 源文件，不安装为 skill
     ├── scripts/        # detect_entry, run_ncu, run_nsys
     └── reference/      # 指标解读、瓶颈映射、SQLite schema
 ```
 
-每个 skill 自包含，符合 Agent Skills 标准。
+每个 skill 是一个自包含目录，符合 Agent Skills 标准。脚本和参考文档在 `shared/` 下存放一份，通过 symlink 链接到各 skill 目录。
 
 ## License
 

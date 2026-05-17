@@ -7,7 +7,7 @@
 <h1 align="center">GPU Profile Skill</h1>
 
 <p align="center">
-  <b>Install, ask, get a report.</b><br>
+  <b>GPU kernel profiling for Claude Code and Codex</b><br>
   <sub>NCU hardware counters &middot; NSYS timeline tracing &middot; Triton &middot; CUDA &middot; TileLang</sub>
 </p>
 
@@ -18,54 +18,22 @@
   <a href="#install">
     <img src="https://img.shields.io/badge/Install-30s-blue?style=flat-square" alt="Install">
   </a>
-  <a href="#supported-frameworks">
+  <a href="#frameworks">
     <img src="https://img.shields.io/badge/Frameworks-12-green?style=flat-square" alt="12 frameworks">
   </a>
 </p>
 
 ---
 
-## How It Works
+## Overview
 
-You say something like "this kernel is slow, show me the bottleneck" or "profile the attention kernel". The agent detects your framework, runs NCU and NSYS, and presents a structured report: roofline classification, 10 groups of hardware metrics, code-level bottleneck mapping, and prioritized findings.
+An Agent Skills package that gives your coding agent the ability to profile GPU kernels with NVIDIA Nsight Compute and Nsight Systems. The agent detects the kernel framework (Triton, CUDA, TileLang, and 9 others), runs the right profiling tool, and produces a structured analysis report.
 
-<table>
-<tr>
-  <td width="160"><b>Ask about bottlenecks</b></td>
-  <td>"why is this kernel slow", "what limits throughput", "is this memory bound"</td>
-</tr>
-<tr>
-  <td><b>Ask for profiling</b></td>
-  <td>"profile the attention kernel", "run NCU on this", "check occupancy"</td>
-</tr>
-<tr>
-  <td><b>Ask about specific metrics</b></td>
-  <td>"tensor core utilization", "memory bandwidth analysis", "stall analysis"</td>
-</tr>
-</table>
-
-The agent knows when NCU needs sudo, when to use NVTX for autotune, how to find kernel names in JIT-compiled code, and how to map hardware metrics back to source code.
-
-## What You Get
-
-A structured report from a single prompt:
-
-```
-Roofline: memory-bound, 72% Memory SOL, 28% headroom
-
-10 metric groups: SOL, compute, DRAM, L1/L2 cache, coalescing, occupancy,
-  launch config, stalls, timing
-
-Code-level mapping: each finding linked to specific source lines with
-  confidence labels
-
-Prioritized findings: top bottlenecks ordered by impact, with concrete
-  metric values as evidence
-```
+The agent handles environment checks, sudo permission detection, CUDA binary discovery, kernel entry point detection, profiling execution, metric interpretation, and code-level bottleneck mapping.
 
 ## Install
 
-<h3>1. Prerequisites</h3>
+<h3>Prerequisites</h3>
 
 <table>
 <tr><td width="180"><b>NVIDIA GPU</b></td><td>Compute capability 7.0+</td></tr>
@@ -74,18 +42,18 @@ Prioritized findings: top bottlenecks ordered by impact, with concrete
 <tr><td><b>Agent runtime</b></td><td>Claude Code or Codex (Agent Skills compatible)</td></tr>
 </table>
 
-<h3>2. Sudo (one-time)</h3>
+<h3>Sudo (one-time)</h3>
 
-NCU reads hardware performance counters which default to root-only.
+NCU reads GPU hardware performance counters, which default to root-only. Fix once:
 
 ```bash
 echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf
 sudo update-initramfs -u && sudo reboot
 ```
 
-Verify: `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly` should output `0`. If you skip this, profiling scripts auto-use sudo.
+Verify with `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`. Expected output: `0`. If skipped, profiling scripts auto-use sudo.
 
-<h3>3. Install</h3>
+<h3>Install</h3>
 
 ```bash
 git clone https://github.com/your-org/gpu-profile-skill.git
@@ -94,9 +62,21 @@ cd gpu-profile-skill
 ./install.sh install     # symlinks to ~/.claude/skills/
 ```
 
-For Codex: `./install.sh install -t codex` (installs to `.agents/skills/`).
+For Codex: `./install.sh install -t codex`.
 
-## Supported Frameworks
+## Usage
+
+After install, ask the agent to profile a kernel. The agent invokes the appropriate skill based on your request:
+
+- Performance questions: *"why is this kernel slow"*, *"what limits throughput"*, *"check the bottleneck"*
+- Profiling requests: *"profile the attention kernel"*, *"run NCU on this"*, *"check occupancy"*
+- Specific metrics: *"tensor core utilization"*, *"memory bandwidth"*, *"stall analysis"*
+
+The agent produces a report covering roofline classification, 10 metric groups, derived metrics, code-level mapping with confidence labels, and prioritized findings.
+
+For JIT-compiled and pre-compiled kernels that lack Python-level decorators, NCU captures all CUDA launches regardless. The agent discovers kernel names at runtime without hardcoded filters. See the sandbox examples for the range of patterns handled.
+
+## Frameworks
 
 | Framework | Detected by |
 |-----------|-------------|
@@ -111,24 +91,22 @@ For Codex: `./install.sh install -t codex` (installs to `.agents/skills/`).
 | **PyTorch CUDA** | `import torch` + CUDA |
 | **JAX, TensorRT, TensorFlow** | framework-specific calls |
 
-For JIT and pre-compiled kernels, NCU captures all CUDA launches regardless. The agent handles kernel name discovery without hardcoded filters.
-
-## Architecture
+## Structure
 
 ```
 skills/
-├── ncu-profile/        # hardware counter analysis
+├── ncu-profile/        # NCU hardware counter analysis
 │   ├── SKILL.md
 │   ├── scripts/        # -> ../../shared/scripts/
 │   └── reference/      # -> ../../shared/reference/
-├── nsys-profile/       # timeline analysis
-├── profile/            # combined NCU + NSYS
-└── shared/             # single source of truth (not installed)
+├── nsys-profile/       # NSYS timeline analysis
+├── profile/            # Combined NCU + NSYS
+└── shared/             # Source files, not installed as a skill
     ├── scripts/        # detect_entry, run_ncu, run_nsys
     └── reference/      # metrics, bottleneck patterns, SQLite schema
 ```
 
-Each skill is self-contained per the Agent Skills standard.
+Each skill is a self-contained directory per the Agent Skills standard. Scripts and reference docs live once under `shared/` and are symlinked into each skill directory.
 
 ## License
 
