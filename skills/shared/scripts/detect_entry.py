@@ -253,13 +253,6 @@ def _detect_frameworks(tree: ast.Module, source: str = "") -> list[str]:
         if any(kw in source for kw in ["tf.load_op_library"]):
             detected.append("tensorflow")
 
-    # Heuristic: import xxx_cuda -> likely pre-compiled CUDA extension
-    has_cuda_module = any(
-        m.endswith("_cuda") or "_cuda_" in m for m in imported_modules
-    )
-    if has_cuda_module and "native" not in detected:
-        detected.insert(0, "native")  # prioritize over torch_cuda
-
     return detected if detected else ["torch_cuda"]
 
 
