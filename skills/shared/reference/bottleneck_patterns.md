@@ -146,75 +146,117 @@ This reference maps NCU metric patterns to likely source-code causes across GPU 
 
 ## Analysis Workflow Guide
 
-This section provides reference patterns for analyzing profiles. Adapt based on the specific kernel and metrics you encounter.
+These are reference patterns. Adapt to the specific kernel and metrics at hand.
 
-### Step 1: Read the Kernel Source
+### Step 1: Read the Kernel Source First
 
-Before looking at metrics, read the kernel source to understand:
-- What operation is this? (matmul, elementwise, reduction, attention, convolution...)
+Before looking at any numbers, understand the kernel:
+- What operation? (matmul, elementwise, reduction, attention, convolution...)
 - Data types (fp16, bf16, fp32, int8...)
-- Tile sizes and block dimensions
-- Pipeline stages and warp counts
+- Tile sizes, block dimensions, warp counts, pipeline stages
 - Memory access patterns (contiguous, strided, gather, scatter)
 
-This tells you what to expect in the metrics.
+This tells you what values to expect. A matmul should show tensor core activity. A streaming kernel should have low L1 hit rate and high DRAM throughput. If the numbers don't match the operation type, something is wrong.
 
-### Step 2: Start with Roofline
+### Step 2: Roofline First
 
-| Metric | What it means |
-|--------|---------------|
+Start every report with the roofline classification. It frames everything that follows.
+
+| Metric | Meaning |
+|--------|---------|
 | `gpu__compute_memory_throughput` (Memory SOL) | How close to peak memory bandwidth |
 | `sm__throughput` (Compute SOL) | How close to peak compute throughput |
-| Both < 60% | Kernel underutilized — look at stalls and occupancy |
+| Both < 60% | Underutilized. The GPU has spare capacity. Look at occupancy and stalls. |
 
-Example roofline summary format:
-```
-Roofline: Memory-bound, Memory SOL 72%, Compute SOL 18%, Headroom 28%
-Tensor Cores: active (12% TC cycles)
-```
-
-### Step 3: Classify and Diagnose
+### Step 3: Diagnose by Classification
 
 **Memory-bound** (Memory SOL >= Compute SOL)
--> Check DRAM throughput, L1/L2 hit rates, sectors/request (coalescing)
--> High sectors/request (>4) means poor coalescing
--> Low L1 hit (<50%) means poor spatial locality
--> Typical causes: strided access, column-major on row-major data, gather/scatter
+- Check coalescing: Sectors/Request. 1.0 = perfect, >4 = waste, >32 = every thread hits different cache line
+- Check L1/L2 hit rates. Low L1 + high L2 = streaming access (may be intentional). Low L2 = data exceeds cache.
+- Check DRAM throughput vs GPU peak
 
 **Compute-bound** (Compute SOL > Memory SOL)
--> Check tensor core utilization, FP32 pipe usage
--> TC < 5% on matmul workloads means tensor cores not engaged (check data types)
--> High FP32 pipe on fp16 workload means dtype mismatch
+- Check tensor core activity. <5% on matmul = TCs not engaged (likely dtype issue)
+- Check FP32 pipe. High on fp16 workload = dtype mismatch somewhere
 
 **Underutilized** (both < 60%)
--> Check occupancy limiter (registers/shared_mem/warps/block count)
--> Check stall reasons (long scoreboard = DRAM latency, barrier = sync overhead)
--> Check waves_per_SM (<1 means not enough work to fill GPU)
+- Check occupancy limiter. Which resource is the bottleneck: registers, shared memory, or warps?
+- Check Waves/SM. <1 means not enough work. >10 means too many tiny blocks (launch overhead).
+- Check stall reasons. Math pipe stall + low eligible warps = not enough warps to hide latency. Long scoreboard = DRAM latency dominating.
+- 255 regs/thread means the compiler spilled nothing but the register file is full; only a few warps can run per SM. 128 regs on a 4-warp kernel is expected. >128 on a 4-warp kernel means occupancy will be limited.
 
-### Step 4: Map to Code
+### Step 4: Explain Metrics as You Go
 
-For each finding, provide:
-1. Specific metric value
-2. Likely code location (line number if identifiable)
-3. Confidence level
+When presenting a metric, always include what it means and what the number signifies. Examples:
+
+Good (explains meaning):
+```
+dkv Active Warps/Scheduler: 1.93 out of 4 possible. This SM has 4 warp schedulers
+but only ~2 warps available to pick from. When a warp stalls on a math instruction,
+there's often no other warp ready, so the scheduler idles.
+```
+
+Bad (just reports value):
+```
+dkv Active Warps/Scheduler: 1.93
+```
+
+Good:
+```
+Waves/SM: 50. This means 50 blocks are queued for each SM. The grid is 8192 blocks
+on 82 SMs. Each block runs fast, but the GPU spends significant time switching
+between blocks. Compare to a well-tuned kernel where Waves/SM is 2-4.
+```
+
+Bad:
+```
+Waves/SM: 49.95
+```
+
+Good:
+```
+Store coalescing: 2.0 bytes per sector out of 32 possible. Only 6.3% of each
+64-byte memory transaction carries useful data. The remaining 93.7% is wasted
+bandwidth. This happens when threads in a warp write to non-contiguous addresses.
+```
+
+### Step 5: Map to Code
+
+For each finding, point to the specific code location and explain the causal chain:
+
+```
+Finding: dq smem limits occupancy to 1 block per SM
+  Evidence: Block Limit Shared Mem = 1, Occupancy = 8%, Active Warps = 1.00
+  Location: det_dq.cuh lines 80-89, SharedStorage struct
+  Why: Q/K/V tiles total 65KB (>48KB SM limit), so only 1 block fits per SM.
+       With 1 block of 4 warps, at most 1 warp runs per scheduler.
+  Confidence: certain
+```
+
+### Step 6: End with a Focused Conclusion
+
+After the detailed sections, provide a short, direct conclusion:
+
+1. State the primary bottleneck in one sentence
+2. Connect it to the evidence (1-2 key numbers)
+3. If multiple findings, show the causal chain (e.g., "X causes Y which results in Z")
+4. Compare to a baseline if available (e.g., "1.37x slower than FA2")
+5. One concrete direction (not a fix, just what to look at)
 
 Example:
 ```
-Finding: Poor load coalescing
-  Metric: Global Load Sectors/Request = 7.2 (target: 1.0)
-  Location: line 42, tl.load(k_ptr + offsets) where offsets has stride > 1
-  Confidence: likely
+Bottom line: Wave explosion is the root cause. Grid of 8192 blocks on 82 SMs
+creates 50-100 waves per SM. Most of the GPU's time is spent switching between
+blocks, not computing. Within each block, only 1-2 warps are available per
+scheduler due to 255 regs/thread and 65KB smem, so math pipe latency cannot
+be hidden. The store coalescing issue (6.3%) and L1 bypass are secondary;
+they only matter after occupancy is fixed. Compared to FA2's 64 blocks on
+82 SMs (<1 wave/SM), the scheduling overhead difference is clear.
 ```
 
-### Step 5: Prioritize Findings
+### Typical Metric Ranges
 
-Order by estimated impact:
-- Memory-bound with poor coalescing > moderate stall > minor config tweak
-- Use concrete numbers: "fixing coalescing could save ~40% DRAM bandwidth"
-
-### Typical Metric Ranges (for reference)
-
-These are typical ranges seen across GPU kernels. Individual results vary by GPU and workload.
+Reference ranges for common GPU kernels. Results vary by GPU and workload.
 
 | Category | Metric | Good | Warning | Critical |
 |----------|--------|------|---------|----------|
@@ -226,15 +268,5 @@ These are typical ranges seen across GPU kernels. Individual results vary by GPU
 | Stall | Barrier | <10% | 10-20% | >20% |
 | Stall | Memory Dependency | <20% | 20-30% | >30% |
 | Registers | Per Thread | <64 | 64-128 | >128 |
-| Waves | Per SM | >2 | 1-2 | <1 |
+| Waves | Per SM | 1-4 | 4-10 | >10 or <1 |
 
-### GPU Spec Reference (for context)
-
-When profiling, note the GPU specs for comparison:
-- Peak DRAM bandwidth (e.g., RTX 3090: ~936 GB/s)
-- Peak FP32 TFLOPS, Peak FP16 TFLOPS
-- L1 cache per SM, L2 cache total
-- Max threads per SM, max registers per SM
-- SM count
-
-These put metric values in context. A kernel reading 800 GB/s on a 936 GB/s GPU is near peak — likely optimal bandwidth use.
