@@ -153,7 +153,14 @@ Each skill is self-contained per the Agent Skills standard. Scripts and docs liv
 | **TileLang** | `@tilelang.jit`, `@T.prim_func`, `import tilelang` |
 | **PyCUDA** | `import pycuda`, `SourceModule` |
 | **CuPy** | `import cupy` |
-| **PyTorch CUDA** | `import torch` + CUDA operations |
+| **PyTorch JIT** | `load_inline`, `cpp_extension.load`, `CUDAExtension` |
+| **CuPy** | `import cupy`, `RawKernel`, `RawModule` |
+| **PyCUDA** | `import pycuda`, `SourceModule` |
+| **Triton AOT** | `triton.compile` |
+| **Native .so** | `ctypes.CDLL`, `cffi.dlopen` |
+| **JAX** | `jax.custom_call` |
+| **TensorRT** | `tensorrt.Builder` |
+| **TensorFlow** | `tf.load_op_library` |
 
 Works for `.py` files. If your kernel is `.cu`, provide a Python wrapper that launches it.
 

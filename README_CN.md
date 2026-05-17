@@ -119,20 +119,30 @@ cd gpu-profile-skill
 
 ```
 skills/
-├── ncu-profile/SKILL.md        # /ncu-profile 命令
-├── nsys-profile/SKILL.md       # /nsys-profile 命令
-├── profile/SKILL.md            # /profile 命令（NCU + NSYS 组合）
-├── gpu-refs/                   # 共享参考文档：指标解读 + 瓶颈映射
-│   ├── ncu_metrics.md
-│   ├── nsys_metrics.md
-│   └── bottleneck_patterns.md
-└── gpu-scripts/                # 共享 Python 脚本
-    ├── detect_entry.py         # 多框架 AST 入口检测
-    ├── run_ncu.py              # NCU 执行 + 指标提取 + roofline 分类
-    └── run_nsys.py             # NSYS 执行 + 时间线解析 + SQLite 分析
+├── ncu-profile/
+│   ├── SKILL.md
+│   ├── scripts/                # -> ../../shared/scripts/
+│   └── reference/              # -> ../../shared/reference/
+├── nsys-profile/
+│   ├── SKILL.md
+│   ├── scripts/
+│   └── reference/
+├── profile/
+│   ├── SKILL.md
+│   ├── scripts/
+│   └── reference/
+└── shared/                     # 源文件，不安装为 skill
+    ├── scripts/
+    │   ├── detect_entry.py
+    │   ├── run_ncu.py
+    │   └── run_nsys.py
+    └── reference/
+        ├── bottleneck_patterns.md
+        ├── ncu_metrics.md
+        └── nsys_metrics.md
 ```
 
-每个 skill 目录只放一个 `SKILL.md`。`gpu-refs/` 和 `gpu-scripts/` 没有 `SKILL.md`，agent 不会把它们当成命令列出来，但 skill 内部可以通过 `../gpu-refs/` 和 `../gpu-scripts/` 访问。
+每个 skill 自包含，符合 Agent Skills 标准。脚本和文档在 `shared/` 中存放一份，通过 symlink 链接到各 skill 内部。SKILL.md 使用干净的相对路径：`scripts/run_ncu.py`、`reference/ncu_metrics.md`。
 
 ## 支持的框架
 
@@ -143,7 +153,14 @@ skills/
 | **TileLang** | `@tilelang.jit`、`@T.prim_func`、`import tilelang` |
 | **PyCUDA** | `import pycuda`、`SourceModule` |
 | **CuPy** | `import cupy` |
-| **PyTorch CUDA** | `import torch` + CUDA 操作 |
+| **PyTorch JIT** | `load_inline`、`cpp_extension.load`、`CUDAExtension` |
+| **CuPy** | `import cupy`、`RawKernel`、`RawModule` |
+| **PyCUDA** | `import pycuda`、`SourceModule` |
+| **Triton AOT** | `triton.compile` |
+| **Native .so** | `ctypes.CDLL`、`cffi.dlopen` |
+| **JAX** | `jax.custom_call` |
+| **TensorRT** | `tensorrt.Builder` |
+| **TensorFlow** | `tf.load_op_library` |
 
 目前只支持 `.py` 文件。如果你的 kernel 是 `.cu` 写的，提供一个 Python wrapper 来调用即可。
 
