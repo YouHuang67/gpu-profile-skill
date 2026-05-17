@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/your-org/gpu-profile-skill/blob/main/LICENSE">
+  <a href="https://github.com/YouHuang67/gpu-profile-skill/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="MIT License">
   </a>
   <a href="#安装">
@@ -62,7 +62,7 @@ sudo reboot
 <h3>安装</h3>
 
 ```bash
-git clone https://github.com/your-org/gpu-profile-skill.git
+git clone https://github.com/YouHuang67/gpu-profile-skill.git
 cd gpu-profile-skill
 ./install.sh check      # 检查 GPU、CUDA、NCU、NSYS、sudo 状态
 ./install.sh install     # 软链接到 ~/.claude/skills/

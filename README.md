@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/your-org/gpu-profile-skill/blob/main/LICENSE">
+  <a href="https://github.com/YouHuang67/gpu-profile-skill/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="MIT License">
   </a>
   <a href="#install">
@@ -62,7 +62,7 @@ After reboot, verify: `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnl
 <h3>Install</h3>
 
 ```bash
-git clone https://github.com/your-org/gpu-profile-skill.git
+git clone https://github.com/YouHuang67/gpu-profile-skill.git
 cd gpu-profile-skill
 ./install.sh check      # verify GPU, CUDA, NCU, NSYS, sudo
 ./install.sh install     # symlinks to ~/.claude/skills/
