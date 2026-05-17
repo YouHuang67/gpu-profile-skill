@@ -7,7 +7,7 @@
 <h1 align="center">GPU Profile Skill</h1>
 
 <p align="center">
-  <b>One-command GPU kernel profiling, works with Claude Code and Codex</b><br>
+  <b>Install, ask, get a report.</b><br>
   <sub>NCU hardware counters &middot; NSYS timeline tracing &middot; Triton &middot; CUDA &middot; TileLang</sub>
 </p>
 
@@ -16,48 +16,52 @@
     <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="MIT License">
   </a>
   <a href="#install">
-    <img src="https://img.shields.io/badge/Install-30s-blue?style=flat-square" alt="Install in 30s">
+    <img src="https://img.shields.io/badge/Install-30s-blue?style=flat-square" alt="Install">
   </a>
   <a href="#supported-frameworks">
-    <img src="https://img.shields.io/badge/Frameworks-Triton%20%7C%20CUDA%20%7C%20TileLang-green?style=flat-square" alt="Frameworks">
+    <img src="https://img.shields.io/badge/Frameworks-12-green?style=flat-square" alt="12 frameworks">
   </a>
 </p>
 
 ---
 
-## What This Does
+## How It Works
 
-Three slash commands that wrap NVIDIA Nsight tooling into automated profiling workflows. Compatible with Claude Code and Codex via the Agent Skills standard. No config files, no boilerplate. Point at a Python file that launches GPU kernels and get structured performance analysis back.
+You say something like "this kernel is slow, show me the bottleneck" or "profile the attention kernel". The agent detects your framework, runs NCU and NSYS, and presents a structured report: roofline classification, 10 groups of hardware metrics, code-level bottleneck mapping, and prioritized findings.
 
 <table>
 <tr>
-  <td width="130"><b><code>/ncu-profile</code></b></td>
-  <td>NCU hardware counter deep-dive: roofline, occupancy, stalls, cache, coalescing, tensor core utilization</td>
-  <td align="center">May need sudo</td>
+  <td width="160"><b>Ask about bottlenecks</b></td>
+  <td>"why is this kernel slow", "what limits throughput", "is this memory bound"</td>
 </tr>
 <tr>
-  <td><b><code>/nsys-profile</code></b></td>
-  <td>NSYS timeline analysis: GPU utilization, kernel timing, memory transfers, launch overhead, CPU/GPU overlap</td>
-  <td align="center">No sudo</td>
+  <td><b>Ask for profiling</b></td>
+  <td>"profile the attention kernel", "run NCU on this", "check occupancy"</td>
 </tr>
 <tr>
-  <td><b><code>/profile</code></b></td>
-  <td>Full combo: NSYS first for a fast overview, then NCU for hardware deep-dive, then unified report</td>
-  <td align="center">Depends on NCU</td>
+  <td><b>Ask about specific metrics</b></td>
+  <td>"tensor core utilization", "memory bandwidth analysis", "stall analysis"</td>
 </tr>
 </table>
 
-**Supported frameworks**: Triton, Numba CUDA, TileLang, PyCUDA, CuPy, raw PyTorch CUDA.
+The agent knows when NCU needs sudo, when to use NVTX for autotune, how to find kernel names in JIT-compiled code, and how to map hardware metrics back to source code.
 
 ## What You Get
 
-The agent detects your framework, checks the environment, finds the kernel entry point, runs profiling, and presents a structured report:
+A structured report from a single prompt:
 
 ```
-Roofline  >  10 metric groups  >  code-level mapping  >  prioritized findings
-```
+Roofline: memory-bound, 72% Memory SOL, 28% headroom
 
-Each finding maps hardware metrics to specific code locations, with certainty levels. **Data for your optimization decisions, not automated rewrites.**
+10 metric groups: SOL, compute, DRAM, L1/L2 cache, coalescing, occupancy,
+  launch config, stalls, timing
+
+Code-level mapping: each finding linked to specific source lines with
+  confidence labels
+
+Prioritized findings: top bottlenecks ordered by impact, with concrete
+  metric values as evidence
+```
 
 ## Install
 
@@ -70,100 +74,61 @@ Each finding maps hardware metrics to specific code locations, with certainty le
 <tr><td><b>Agent runtime</b></td><td>Claude Code or Codex (Agent Skills compatible)</td></tr>
 </table>
 
-<h3>2. One-time sudo setup</h3>
+<h3>2. Sudo (one-time)</h3>
 
-NCU reads GPU hardware performance counters, which default to root-only. Fix once (reboot required):
+NCU reads hardware performance counters which default to root-only.
 
 ```bash
 echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf
 sudo update-initramfs -u && sudo reboot
 ```
 
-After reboot, run `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`; expected output is `0`.
+Verify: `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly` should output `0`. If you skip this, profiling scripts auto-use sudo.
 
-If you skip this step, profiling scripts auto-use `sudo` (you will get password prompts for each NCU run).
-
-<h3>3. Install skills</h3>
+<h3>3. Install</h3>
 
 ```bash
 git clone https://github.com/your-org/gpu-profile-skill.git
 cd gpu-profile-skill
-./install.sh check      # verify GPU, CUDA, NCU, NSYS, sudo status
-./install.sh install     # symlink skills into ~/.claude/skills/
+./install.sh check      # verify GPU, CUDA, NCU, NSYS, sudo
+./install.sh install     # symlinks to ~/.claude/skills/
 ```
 
-Uninstall: `./install.sh uninstall`. Check status: `./install.sh status`.
-
-After install, `/ncu-profile`, `/nsys-profile`, `/profile` are available in your agent.
-
-<h3>Codex install</h3>
-
-```bash
-./install.sh install -t codex     # -> ./.agents/skills/
-./install.sh status -t codex
-```
-
-## Usage
-
-```
-/profile path/to/kernel.py                           # Full NCU + NSYS
-/ncu-profile path/to/kernel.py                       # Hardware counters only
-/nsys-profile path/to/kernel.py                      # Timeline only
-/ncu-profile path/to/kernel.py -k "sparse_attn"      # Filter to specific kernel
-/ncu-profile path/to/test.py --nvtx profile_target   # NVTX: skip autotune warmup
-```
-
-The entry detector (`detect_entry.py`) auto-classifies the file as runnable, callable, or kernel-only and generates wrappers when needed.
-
-## Architecture
-
-```
-skills/
-├── ncu-profile/
-│   ├── SKILL.md
-│   ├── scripts/                # -> ../../shared/scripts/
-│   └── reference/              # -> ../../shared/reference/
-├── nsys-profile/
-│   ├── SKILL.md
-│   ├── scripts/
-│   └── reference/
-├── profile/
-│   ├── SKILL.md
-│   ├── scripts/
-│   └── reference/
-└── shared/                     # Single source of truth (not installed)
-    ├── scripts/
-    │   ├── detect_entry.py
-    │   ├── run_ncu.py
-    │   └── run_nsys.py
-    └── reference/
-        ├── bottleneck_patterns.md
-        ├── ncu_metrics.md
-        └── nsys_metrics.md
-```
-
-Each skill is self-contained per the Agent Skills standard. Scripts and docs live once in `shared/` and are symlinked into each skill. SKILL.md uses clean relative paths: `scripts/run_ncu.py`, `reference/ncu_metrics.md`.
+For Codex: `./install.sh install -t codex` (installs to `.agents/skills/`).
 
 ## Supported Frameworks
 
 | Framework | Detected by |
 |-----------|-------------|
-| **Triton** | `@triton.jit`, `@triton.autotune`, `import triton` |
-| **Numba CUDA** | `@cuda.jit`, `from numba import cuda` |
-| **TileLang** | `@tilelang.jit`, `@T.prim_func`, `import tilelang` |
-| **PyTorch JIT** | `load_inline`, `cpp_extension.load`, `CUDAExtension` |
-| **CuPy** | `import cupy`, `RawKernel`, `RawModule` |
-| **PyCUDA** | `import pycuda`, `SourceModule` |
+| **Triton** | `@triton.jit`, `@triton.autotune` |
+| **Numba CUDA** | `@cuda.jit` |
+| **TileLang** | `@tilelang.jit`, `@T.prim_func` |
+| **PyTorch JIT** | `load_inline`, `cpp_extension.load` |
+| **CuPy** | `RawKernel`, `RawModule` |
+| **PyCUDA** | `SourceModule` |
+| **Pre-compiled .so** | `ctypes.CDLL`, `import xxx_cuda` |
 | **Triton AOT** | `triton.compile` |
-| **Native .so** | `ctypes.CDLL`, `cffi.dlopen` |
-| **PyTorch CUDA** | `import torch` + CUDA operations |
-| **JAX** | `jax.custom_call`, `register_custom_call_target` |
-| **TensorRT** | `tensorrt.Builder` |
-| **TensorFlow** | `tf.load_op_library` |
+| **PyTorch CUDA** | `import torch` + CUDA |
+| **JAX, TensorRT, TensorFlow** | framework-specific calls |
 
-For JIT-compiled kernels (`load_inline`, `RawKernel`, `SourceModule`) the CUDA code is in Python strings. No Python-level decorator exists, but NCU captures all kernel launches regardless. For pre-compiled `.so` files (`ctypes.CDLL`, `import xxx_cuda`), the CUDA code is in a binary — profile without `-k` filter first to discover kernel names.
+For JIT and pre-compiled kernels, NCU captures all CUDA launches regardless. The agent handles kernel name discovery without hardcoded filters.
 
-Works for `.py` files. If your kernel is `.cu`, provide a Python wrapper that launches it.
+## Architecture
+
+```
+skills/
+├── ncu-profile/        # hardware counter analysis
+│   ├── SKILL.md
+│   ├── scripts/        # -> ../../shared/scripts/
+│   └── reference/      # -> ../../shared/reference/
+├── nsys-profile/       # timeline analysis
+├── profile/            # combined NCU + NSYS
+└── shared/             # single source of truth (not installed)
+    ├── scripts/        # detect_entry, run_ncu, run_nsys
+    └── reference/      # metrics, bottleneck patterns, SQLite schema
+```
+
+Each skill is self-contained per the Agent Skills standard.
 
 ## License
 
