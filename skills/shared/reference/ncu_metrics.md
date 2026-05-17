@@ -173,3 +173,53 @@
 ### Derived Metrics
 - **kernel_duration_ms** = duration / 1e6
 - **dram_bandwidth_gbps** = dram_bytes / duration_ns
+
+
+---
+
+## GPU Spec Reference
+
+When interpreting NCU metrics, compare against the GPU's hardware limits. Query with:
+
+```bash
+nvidia-smi --query-gpu=name,memory.total,compute_cap --format=csv,noheader
+```
+
+Common reference values (verify for your specific GPU):
+
+| GPU | Arch | Peak DRAM BW | Peak FP16 TFLOPS | SMs | L2 Cache |
+|-----|------|-------------|------------------|-----|----------|
+| RTX 3090 | Ampere (8.6) | 936 GB/s | 35.6 | 82 | 6 MB |
+| A100 | Ampere (8.0) | 1555 GB/s | 312 | 108 | 40 MB |
+| H100 | Hopper (9.0) | 2039 GB/s | 990 | 132 | 50 MB |
+| RTX 4090 | Ada (8.9) | 1008 GB/s | 82.6 | 128 | 72 MB |
+
+For other GPUs, look up specs from NVIDIA documentation or compute the peak DRAM bandwidth from the memory bus width and clock rate.
+
+## NCU Command Quick Reference
+
+Common NCU commands for reference (all wrapped by `run_ncu.py`):
+
+```bash
+# Basic: profile all kernels, CSV output
+ncu --set full --target-processes all --export report.ncu-rep python script.py
+
+# Filter: only specific kernel name (regex)
+ncu --kernel-name "my_kernel" --launch-skip 5 --launch-count 3 ...
+
+# NVTX: only profile code inside nvtx range
+ncu --nvtx --nvtx-include "profile_target/" ...
+
+# Export: binary report for GUI
+ncu --export report.ncu-rep ...
+
+# Import: extract data from report
+ncu --import report.ncu-rep --csv --page raw      # section summary
+ncu --import report.ncu-rep --page details        # full per-metric text
+```
+
+Notes for run_ncu.py users:
+- `--launch-skip (-s)` and `--launch-count (-n)` count ALL CUDA kernel launches globally
+- In mixed workloads (e.g., PyTorch + custom JIT kernel), PyTorch internal ops count toward skip/count
+- For JIT kernels where you cannot predict launch count, omit `-s`/`-n` and use `--nvtx-include`
+- For pre-compiled .so files, kernel names are from the compiled binary; profile without `-k` first to discover names
