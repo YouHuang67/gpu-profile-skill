@@ -7,7 +7,7 @@ Analyzes a .py file to determine how it can be invoked for profiling:
 - Has benchmark/test/main functions: generate a wrapper call
 - Only kernel definitions: report what's available for the user to decide
 
-Supports: Triton, Numba CUDA, TileLang, PyCUDA, CuPy raw kernels.
+Supports: Triton, Numba CUDA, TileLang, PyCUDA, CuPy, PyTorch JIT (load_inline).
 """
 
 import argparse
@@ -41,6 +41,11 @@ FRAMEWORK_REGISTRY = {
         "imports": ["cupy"],
         "kernel_decorators": [],
         "label": "CuPy",
+    },
+    "torch_jit": {
+        "imports": ["torch.utils.cpp_extension"],
+        "kernel_decorators": [],
+        "label": "PyTorch JIT (load_inline)",
     },
     "torch_cuda": {
         "imports": ["torch.cuda", "torch"],
@@ -169,8 +174,10 @@ def analyze_kernel_file(filepath: str) -> dict:
         result["runnable"] = False
         result["description"] = (
             "No GPU kernel decorators or entry points detected. "
-            "Profiling can still proceed — any CUDA kernel launches in the "
-            "script will be captured."
+            "If this is a PyTorch JIT kernel (load_inline / cpp_extension) or raw "
+            "CUDA C++ compiled at runtime, NCU/NSYS will still capture all CUDA "
+            "kernel launches. Proceed with profiling — kernel name filters may "
+            "need to match mangled names with template parameters."
         )
 
     return result
@@ -202,6 +209,8 @@ def _detect_frameworks(tree: ast.Module, source: str = "") -> list[str]:
                 detected.append("numba_cuda")
             elif "pycuda" in source:
                 detected.append("pycuda")
+        if any(kw in source for kw in ["load_inline", "cpp_extension"]):
+            detected.append("torch_jit")
 
     return detected if detected else ["torch_cuda"]
 

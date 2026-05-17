@@ -336,10 +336,19 @@ def build_ncu_command(
 
 
 def build_import_command(
-    ncu_rep_path: str, ncu_bin: str = "ncu"
+    ncu_rep_path: str, ncu_bin: str = "ncu", page: str = "raw"
 ) -> list[str]:
-    """Build the ncu --import command (phase 2: extract CSV)."""
-    return [ncu_bin, "--import", ncu_rep_path, "--csv", "--page", "raw"]
+    """Build the ncu --import command (phase 2: extract data).
+
+    Args:
+        ncu_rep_path: Path to .ncu-rep file.
+        ncu_bin: Path to ncu binary.
+        page: raw (CSV, section-level summary) or details (text, per-metric values).
+    """
+    cmd = [ncu_bin, "--import", ncu_rep_path, "--page", page]
+    if page == "raw":
+        cmd.insert(3, "--csv")
+    return cmd
 
 
 def run_ncu(
@@ -355,6 +364,7 @@ def run_ncu(
     nvtx_include: str = "",
     selection: str = "last",
     kernel_name_filter: str = "",
+    page: str = "raw",
 ) -> dict:
     """Run NCU profiling in two phases and return parsed metrics."""
     ncu_bin = find_ncu(ncu_bin)
@@ -424,7 +434,7 @@ def run_ncu(
             "command": " ".join(cmd),
         }
 
-    import_cmd = build_import_command(ncu_rep_path, ncu_bin)
+    import_cmd = build_import_command(ncu_rep_path, ncu_bin, page)
     try:
         import_proc = subprocess.run(
             import_cmd,
@@ -445,6 +455,16 @@ def run_ncu(
             "error": f"ncu --import failed (exit {import_proc.returncode})",
             "ncu_rep_path": ncu_rep_path,
             "stderr": import_proc.stderr[-2000:] if import_proc.stderr else "",
+        }
+
+    if page == "details":
+        return {
+            "success": True,
+            "ncu_rep_path": ncu_rep_path,
+            "format": "details",
+            "raw_text": import_proc.stdout[-50000:] if import_proc.stdout else "",
+            "permission": perm,
+            "all_kernel_names": _extract_kernel_names_from_details(import_proc.stdout),
         }
 
     csv_text = import_proc.stdout
@@ -480,6 +500,16 @@ def run_ncu(
         "grouped_metrics": grouped,
         "command": " ".join(cmd),
     }
+
+
+def _extract_kernel_names_from_details(text: str) -> list[str]:
+    """Extract kernel names from --page details text output."""
+    names = set()
+    for line in text.split("\n"):
+        line = line.strip()
+        if line.startswith("Kernel: "):
+            names.add(line.replace("Kernel: ", "", 1))
+    return sorted(names)
 
 
 def parse_ncu_csv(csv_text: str) -> list[dict[str, str]]:
@@ -689,17 +719,26 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 Examples:
-  # Basic profiling
+  # Basic profiling (CSV with section-level summary)
   python run_ncu.py test_kernel.py
 
-  # Profile with NVTX (skip autotune, capture target kernel)
+  # Per-metric detail (text output, slower but complete)
+  python run_ncu.py test_kernel.py --page details
+
+  # Profile with NVTX (skip autotune warmup, capture only target region)
   python run_ncu.py test_kernel.py --nvtx-include profile_target
 
-  # Profile specific kernel, skip warmup
+  # Profile specific kernel by regex, skip N warmup launches
   python run_ncu.py test_kernel.py -k "sparse_attention" -s 5 -n 1
 
-  # Compare: filter different kernel from same profile
-  python run_ncu.py test_kernel.py --kernel-name-filter "window_rearrange"
+  # JIT/C++ kernel: regex must match mangled name with template params
+  python run_ncu.py test_jit.py -k "det_attn_bwd" --timeout 600
+
+Notes:
+  --launch-skip (-s) and --launch-count (-n) are GLOBAL launch counts.
+  In mixed PyTorch+JIT workloads, PyTorch internal kernel launches count
+  toward these totals. For JIT kernels, use --nvtx-include or run without
+  -s/-n to capture all kernels, then filter by name in results.
 """,
     )
     parser.add_argument("script", help="Python script to profile")
@@ -733,6 +772,12 @@ Examples:
         "--kernel-name-filter", default="",
         help="Substring filter on kernel name in results",
     )
+    parser.add_argument(
+        "--page", default="raw",
+        choices=["raw", "details"],
+        help="NCU import detail level: raw (CSV section summary, default) "
+             "or details (per-metric text output for full breakdown)",
+    )
     args = parser.parse_args()
 
     if args.output_dir is None:
@@ -751,6 +796,7 @@ Examples:
         nvtx_include=args.nvtx_include,
         selection=args.selection,
         kernel_name_filter=args.kernel_name_filter,
+        page=args.page,
     )
 
     print(json.dumps(result, indent=2, default=str))
