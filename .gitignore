@@ -1,0 +1,14 @@
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.swp
+*~
+projects/
+docs/
+*.nsys-rep
+*.ncu-rep
+*.sqlite
+*.csv
+/tmp/
