@@ -151,16 +151,17 @@ Each skill is self-contained per the Agent Skills standard. Scripts and docs liv
 | **Triton** | `@triton.jit`, `@triton.autotune`, `import triton` |
 | **Numba CUDA** | `@cuda.jit`, `from numba import cuda` |
 | **TileLang** | `@tilelang.jit`, `@T.prim_func`, `import tilelang` |
-| **PyCUDA** | `import pycuda`, `SourceModule` |
-| **CuPy** | `import cupy` |
 | **PyTorch JIT** | `load_inline`, `cpp_extension.load`, `CUDAExtension` |
 | **CuPy** | `import cupy`, `RawKernel`, `RawModule` |
 | **PyCUDA** | `import pycuda`, `SourceModule` |
 | **Triton AOT** | `triton.compile` |
 | **Native .so** | `ctypes.CDLL`, `cffi.dlopen` |
-| **JAX** | `jax.custom_call` |
+| **PyTorch CUDA** | `import torch` + CUDA operations |
+| **JAX** | `jax.custom_call`, `register_custom_call_target` |
 | **TensorRT** | `tensorrt.Builder` |
 | **TensorFlow** | `tf.load_op_library` |
+
+For JIT-compiled kernels (`load_inline`, `RawKernel`, `SourceModule`) the CUDA code is in Python strings. No Python-level decorator exists, but NCU captures all kernel launches regardless. For pre-compiled `.so` files (`ctypes.CDLL`, `import xxx_cuda`), the CUDA code is in a binary — profile without `-k` filter first to discover kernel names.
 
 Works for `.py` files. If your kernel is `.cu`, provide a Python wrapper that launches it.
 

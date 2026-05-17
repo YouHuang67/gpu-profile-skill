@@ -151,16 +151,17 @@ skills/
 | **Triton** | `@triton.jit`、`@triton.autotune`、`import triton` |
 | **Numba CUDA** | `@cuda.jit`、`from numba import cuda` |
 | **TileLang** | `@tilelang.jit`、`@T.prim_func`、`import tilelang` |
-| **PyCUDA** | `import pycuda`、`SourceModule` |
-| **CuPy** | `import cupy` |
 | **PyTorch JIT** | `load_inline`、`cpp_extension.load`、`CUDAExtension` |
 | **CuPy** | `import cupy`、`RawKernel`、`RawModule` |
 | **PyCUDA** | `import pycuda`、`SourceModule` |
 | **Triton AOT** | `triton.compile` |
 | **Native .so** | `ctypes.CDLL`、`cffi.dlopen` |
-| **JAX** | `jax.custom_call` |
+| **PyTorch CUDA** | `import torch` + CUDA 操作 |
+| **JAX** | `jax.custom_call`、`register_custom_call_target` |
 | **TensorRT** | `tensorrt.Builder` |
 | **TensorFlow** | `tf.load_op_library` |
+
+JIT 编译的 kernel（`load_inline`、`RawKernel`、`SourceModule`）CUDA 代码在 Python 字符串里，没有装饰器，但 NCU 能直接捕获所有 kernel 启动。预编译 `.so`（`ctypes.CDLL`、`import xxx_cuda`）CUDA 代码在二进制里，先不加 `-k` 跑全量再 grep 找 kernel 名。
 
 目前只支持 `.py` 文件。如果你的 kernel 是 `.cu` 写的，提供一个 Python wrapper 来调用即可。
 

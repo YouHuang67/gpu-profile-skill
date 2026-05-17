@@ -66,4 +66,12 @@ python scripts/run_ncu.py <script> -o $PROFILE_DIR/ncu --python "$(which python)
 
 Do NOT suggest fixes unless asked.
 
+## Follow-Up
+- "Open .ncu-rep / .nsys-rep in GUI?" (provide paths)
+- "Run `/ncu-profile` for deeper hardware counter analysis?"
+- "Run `/nsys-profile` for focused timeline analysis?"
+- "Re-run with different parameters?"
+
+Always report .ncu-rep and .nsys-rep paths. Temp files in $PROFILE_DIR -- remind user.
+
 Always report .ncu-rep and .nsys-rep paths. Remind user about temp files.
