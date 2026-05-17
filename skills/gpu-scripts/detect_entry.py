@@ -52,6 +52,11 @@ FRAMEWORK_REGISTRY = {
         "kernel_decorators": [],
         "label": "PyTorch CUDA",
     },
+    "native": {
+        "imports": ["ctypes", "cffi"],
+        "kernel_decorators": [],
+        "label": "Native .so / ctypes",
+    },
 }
 
 
@@ -209,8 +214,14 @@ def _detect_frameworks(tree: ast.Module, source: str = "") -> list[str]:
                 detected.append("numba_cuda")
             elif "pycuda" in source:
                 detected.append("pycuda")
-        if any(kw in source for kw in ["load_inline", "cpp_extension"]):
+        if any(kw in source for kw in ["load_inline", "cpp_extension", "load_library"]):
             detected.append("torch_jit")
+        if any(kw in source for kw in ["RawKernel", "RawModule"]):
+            detected.append("cupy")
+        if any(kw in source for kw in ["T.prim_func", "T.macro"]):
+            detected.append("tilelang")
+        if any(kw in source for kw in ["ctypes.CDLL", "cdll.LoadLibrary"]):
+            detected.append("native")
 
     return detected if detected else ["torch_cuda"]
 
