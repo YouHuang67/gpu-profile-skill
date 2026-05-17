@@ -102,3 +102,81 @@ Tips:
 4. **cudaDeviceSynchronize in hot path?** -> Remove unnecessary sync points
 5. **Many tiny kernels (<10us each)?** -> Consider kernel fusion
 6. **High DtoD memcpy?** -> Check for unnecessary tensor copies on GPU
+
+
+---
+
+## NSYS SQLite Schema Quick Reference
+
+When analyzing `.nsys-rep` via SQLite export:
+
+```bash
+nsys export -t sqlite -o report.sqlite report.nsys-rep
+sqlite3 report.sqlite
+```
+
+### Key Tables
+
+| Table | Content |
+|-------|---------|
+| `CUPTI_ACTIVITY_KIND_KERNEL` | CUDA kernel launches (start, end, name, grid, block, regs, smem) |
+| `CUPTI_ACTIVITY_KIND_MEMCPY` | Memory copy operations (direction, bytes) |
+| `CUPTI_ACTIVITY_KIND_RUNTIME` | CUDA runtime API calls |
+| `StringIds` | Name lookup table — kernel/API names are stored as integer IDs |
+
+### Kernel Name Lookup
+
+Kernel names in `CUPTI_ACTIVITY_KIND_KERNEL` are integer IDs. Join with `StringIds`:
+
+```sql
+SELECT s.value AS name, COUNT(*) AS count,
+       SUM(k.end - k.start) AS total_ns
+FROM CUPTI_ACTIVITY_KIND_KERNEL k
+JOIN StringIds s ON k.shortName = s.id
+GROUP BY k.shortName
+ORDER BY total_ns DESC
+LIMIT 20;
+```
+
+Use `demangledName` instead of `shortName` for demangled kernel names (includes template params for JIT kernels). Not all kernels have a demangled name entry.
+
+### Useful Queries
+
+```sql
+-- GPU utilization
+SELECT
+  MIN(start) AS first_event,
+  MAX(end) AS last_event,
+  (SELECT SUM(end - start) FROM CUPTI_ACTIVITY_KIND_KERNEL) AS busy_ns
+FROM CUPTI_ACTIVITY_KIND_KERNEL;
+
+-- Memory copy by direction
+SELECT copyKind, COUNT(*) AS count,
+       SUM(bytes) AS total_bytes,
+       SUM(end - start) AS total_ns
+FROM CUPTI_ACTIVITY_KIND_MEMCPY
+GROUP BY copyKind;
+-- copyKind: 1=HtoD, 2=DtoH, 8=DtoD, 10=HtoD_Pinned
+
+-- Top CUDA API calls
+SELECT s.value AS api_name, COUNT(*) AS count,
+       SUM(r.end - r.start) AS total_ns
+FROM CUPTI_ACTIVITY_KIND_RUNTIME r
+LEFT JOIN StringIds s ON r.nameId = s.id
+GROUP BY r.nameId
+ORDER BY total_ns DESC
+LIMIT 15;
+```
+
+### Column Reference: CUPTI_ACTIVITY_KIND_KERNEL
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `shortName` | int (FK StringIds) | Mangled kernel name |
+| `demangledName` | int (FK StringIds) | Demangled name (may be NULL for JIT) |
+| `start` / `end` | int (ns) | Timestamps |
+| `gridX/Y/Z` | int | Grid dimensions |
+| `blockX/Y/Z` | int | Block dimensions |
+| `registersPerThread` | int | Register count |
+| `staticSharedMemory` | int | Static shared memory (bytes) |
+| `dynamicSharedMemory` | int | Dynamic shared memory (bytes) |

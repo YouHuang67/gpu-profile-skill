@@ -46,7 +46,7 @@ sudo update-initramfs -u && sudo reboot
 
 ### NCU Binary Location
 
-Auto-search order: `$CUDA_HOME/bin/ncu` → PATH → `/usr/local/cuda/bin/ncu` → `/usr/local/cuda-{12.8..11.8}/bin/ncu`.
+Auto-search order: `$CUDA_HOME/bin/ncu` -> PATH -> `/usr/local/cuda/bin/ncu` -> `/usr/local/cuda-{12.8..11.8}/bin/ncu`.
 
 ```bash
 python -c "
@@ -79,7 +79,7 @@ python ${CLAUDE_SKILL_DIR}/../gpu-scripts/detect_entry.py "$ARGUMENTS" --json
 | `error` | File issue | Report error, stop |
 | `main_block` | Runnable script | Use as-is |
 | `callable` | Has launch functions, no `__main__` | Generate wrapper at `/tmp/gpu_profile_*/wrapper.py`, confirm inputs |
-| `kernel_only` | Only kernel definitions | Ask user how to invoke; offer wrapper if signatures are clear |
+| `kernel_only` | Only kernel definitions, or no Python decorators (JIT/C++ kernel) | For JIT: NCU captures all CUDA launches regardless; proceed. Kernel name filters may need to match mangled/template names. |
 
 ## Step 3: Run NCU
 
@@ -93,9 +93,11 @@ python ${CLAUDE_SKILL_DIR}/../gpu-scripts/run_ncu.py \
 
 Options:
 - Explicit NCU path: `--ncu /usr/local/cuda-12.4/bin/ncu`
-- NVTX (skip autotune warmup): `--nvtx-include "profile_target"`  
+- NVTX (skip autotune warmup): `--nvtx-include "profile_target"`
   The test script must wrap the target with: `with torch.cuda.nvtx.range("profile_target"): kernel(...)`
-- Kernel filter + launch control: `-k "kernel_name" -s 5 -n 1`
+- Kernel filter: `-k "kernel_name"` — regex matches kernel names. For JIT kernels, names include template params like `void det_attn_bwd_dkv_kernel<(int)64,...>`. Use a short substring match (e.g. `-k "det_attn_bwd"`).
+- Launch control: `-s N -n M` — skip N global launches, profile M. These are GLOBAL counts: in mixed PyTorch+JIT workloads, PyTorch internal launches also count. Prefer NVTX over `-s`/`-n` for JIT.
+- Detail level: `--page details` for per-metric text output (slower but complete). Default is `--page raw` (CSV section summary, fast).
 
 Output: `.ncu-rep` (GUI-openable) + metrics JSON to stdout.
 
@@ -105,14 +107,18 @@ Output: `.ncu-rep` (GUI-openable) + metrics JSON to stdout.
 |---------|-------|-----|
 | Permission denied | RmProfilingAdminOnly=1 | Use sudo or permanent fix |
 | No .ncu-rep produced | No CUDA kernel launched | Verify script runs GPU kernels |
+| "No kernels were profiled" with `-k` | Regex didn't match JIT kernel name | Drop `-k`, run without filter, then filter by name in results. Use `--kernel-name-filter` in post-processing instead. |
 | Timed out (300s) | Profiling too slow | `--timeout 600` or reduce data |
 | Module not found | Wrong Python env | Verify Python env, dependencies |
 | exit 137 (OOM) | Too much memory | Reduce input tensor sizes |
 | ncu: command not found | NCU not installed | Install or `--ncu` flag |
+| `-s`/`-n` skip target kernel | Global launch count includes PyTorch internal ops | Don't use `-s`/`-n` for JIT workloads. Use NVTX or skip filtering and profile all. |
 
 ## Step 5: Analyze Results
 
-Read the JSON output. Present in this structure:
+Read the JSON output. When `--page raw` gives only section-level summaries and you need per-metric breakdown, re-run with `--page details` to get full text output with individual metric values.
+
+Present in this structure:
 
 ### 1. Roofline Classification
 
@@ -157,7 +163,7 @@ For each major finding:
 - Explain what metrics suggest about that code
 - State confidence: **certain** / **likely** / **speculative**
 
-GPU DSL compilers (Triton/Numba/TileLang/nvcc) transform code through multiple passes, so exact source-to-SASS mapping is imprecise.
+GPU DSL compilers (Triton/Numba/TileLang/nvcc) and JIT paths (load_inline/cpp_extension) transform code through multiple passes, so exact source-to-SASS mapping is imprecise.
 
 ### 5. Key Findings
 
@@ -175,6 +181,7 @@ Top 3-5 findings ordered by estimated impact:
 After presenting results, offer:
 - "Open `.ncu-rep` in Nsight Compute GUI?" (give path)
 - "Re-run with NVTX to isolate a specific kernel?"
+- "Re-run with `--page details` for per-metric breakdown?"
 - "Run `/nsys-profile` for timeline and GPU utilization data?"
 - "Dive deeper into any metric group?"
 
