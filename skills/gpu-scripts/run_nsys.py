@@ -125,7 +125,7 @@ def run_nsys(
                 )
             if "module" in stderr_lower and "not found" in stderr_lower:
                 hints.append(
-                    "Python module not found. Check conda env and "
+                    "Python module not found. Check Python env and "
                     "PYTHONPATH."
                 )
             if not hints:

@@ -418,7 +418,7 @@ def run_ncu(
         if "module" in stderr_lower and "not found" in stderr_lower:
             hints.append(
                 "Python module not found. Check that all dependencies "
-                "are installed in the conda env and PYTHONPATH is correct."
+                "are installed and PYTHONPATH is correct."
             )
         if not hints:
             hints.append(
