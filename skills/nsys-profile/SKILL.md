@@ -24,12 +24,11 @@ NSYS usually does NOT need sudo.
 
 ```bash
 python -c "
-import shutil, os
+import shutil, os, glob
 nsys = shutil.which('nsys')
 if nsys: print('NSYS on PATH:', nsys)
-for v in ['12.8','12.6','12.4','12.2','12.0','11.8']:
-    p = f'/usr/local/cuda-{v}/bin/nsys'
-    if os.path.isfile(p): print('Found:', p)
+for p in sorted(glob.glob('/usr/local/cuda*/bin/nsys')):
+    print('Found:', p)
 "
 ```
 

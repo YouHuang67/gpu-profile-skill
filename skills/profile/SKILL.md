@@ -28,13 +28,12 @@ sudo reboot`
 ### NCU/NSYS Binaries
 ```bash
 python -c "
-import shutil, os
+import shutil, os, glob
 for tool in ['ncu', 'nsys']:
     p = shutil.which(tool)
     if p: print(f'{tool} (PATH): {p}')
-    for v in ['12.8','12.6','12.4','12.2','12.0','11.8']:
-        c = f'/usr/local/cuda-{v}/bin/{tool}'
-        if os.path.isfile(c): print(f'{tool}: {c}')
+    for c in sorted(glob.glob(f'/usr/local/cuda*/bin/{tool}')):
+        print(f'{tool}: {c}')
 "
 ```
 

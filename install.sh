@@ -204,7 +204,7 @@ do_check() {
 
     echo ""
     echo "=== CUDA Toolkit ==="
-    _check "NCU binary"   sh -c 'command -v ncu || ls /usr/local/cuda*/bin/ncu 2>/dev/null'
+    _check "NCU binary"   sh -c 'command -v ncu || ls /usr/local/cuda*/bin/ncu 2>/dev/null || ls /opt/cuda/bin/ncu 2>/dev/null'
     _check "NSYS binary"  sh -c 'command -v nsys || ls /usr/local/cuda*/bin/nsys 2>/dev/null'
 
     echo ""

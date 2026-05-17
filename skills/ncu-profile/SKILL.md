@@ -45,12 +45,11 @@ Auto-search: `$CUDA_HOME/bin/ncu` -> PATH -> `/usr/local/cuda/bin/ncu` -> `/usr/
 
 ```bash
 python -c "
-import shutil, os
+import shutil, os, glob
 ncu = shutil.which('ncu')
 if ncu: print('NCU on PATH:', ncu)
-for v in ['12.8','12.6','12.4','12.2','12.0','11.8']:
-    p = f'/usr/local/cuda-{v}/bin/ncu'
-    if os.path.isfile(p): print('Found:', p)
+for p in sorted(glob.glob('/usr/local/cuda*/bin/ncu')):
+    print('Found:', p)
 "
 ```
 

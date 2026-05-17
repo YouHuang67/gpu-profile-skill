@@ -6,6 +6,7 @@ Outputs structured JSON for Claude to interpret.
 """
 
 import argparse
+import glob
 import json
 import os
 import re
@@ -38,26 +39,26 @@ def find_nsys(nsys_bin: str | None = None) -> str:
         return found
 
     cuda_home = os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH")
-    search_dirs = []
     if cuda_home:
-        search_dirs.append(os.path.join(cuda_home, "bin"))
+        candidate = os.path.join(cuda_home, "bin", "nsys")
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
 
-    search_dirs.append("/usr/local/cuda/bin")
-    for ver in ["12.8", "12.7", "12.6", "12.5", "12.4", "12.3",
-                "12.2", "12.1", "12.0", "11.8"]:
-        search_dirs.append(f"/usr/local/cuda-{ver}/bin")
-
-    for d in search_dirs:
+    for d in glob.glob("/usr/local/cuda*/bin"):
         candidate = os.path.join(d, "nsys")
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
             return candidate
 
+    searched = ["PATH"]
+    if cuda_home:
+        searched.append(f"$CUDA_HOME={cuda_home}")
+    searched.append("/usr/local/cuda*/bin (glob)")
+
     raise RuntimeError(
-        "nsys not found. Searched:\n"
-        "  - PATH\n"
-        f"  - $CUDA_HOME={cuda_home or '(not set)'}\n"
-        f"  - /usr/local/cuda*/bin\n"
-        "Fix: install Nsight Systems, or pass --nsys /path/to/nsys"
+        "nsys not found. Searched: " + ", ".join(searched) + ".\n"
+        "To locate nsys, try: find / -name nsys -type f 2>/dev/null\n"
+        "Then pass the path: --nsys /path/to/nsys\n"
+        "Or install Nsight Systems: https://developer.nvidia.com/nsight-systems"
     )
 
 
