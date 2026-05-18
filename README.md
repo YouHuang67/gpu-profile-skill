@@ -1,6 +1,4 @@
-<div align="right">
-  <a href="README_CN.md">中文</a> | <b>English</b>
-</div>
+<h3><a href="README_CN.md">中文</a> | <b>English</b></h3>
 
 <br>
 
