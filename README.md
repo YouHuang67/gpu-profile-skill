@@ -11,13 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/YouHuang67/gpu-profile-skill/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="MIT License">
-  </a>
-  <a href="#install">
-    <img src="https://img.shields.io/badge/Install-30s-blue?style=flat-square" alt="Install">
-  </a>
-  <a href="#frameworks">
-    <img src="https://img.shields.io/badge/Frameworks-12-green?style=flat-square" alt="12 frameworks">
+    <img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="MIT License">
   </a>
 </p>
 

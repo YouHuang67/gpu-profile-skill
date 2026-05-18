@@ -11,13 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/YouHuang67/gpu-profile-skill/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="MIT License">
-  </a>
-  <a href="#安装">
-    <img src="https://img.shields.io/badge/安装-30_秒-blue?style=flat-square" alt="安装">
-  </a>
-  <a href="#支持的框架">
-    <img src="https://img.shields.io/badge/框架-12-green?style=flat-square" alt="12 种框架">
+    <img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="MIT License">
   </a>
 </p>
 
