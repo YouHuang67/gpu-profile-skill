@@ -10,9 +10,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/YouHuang67/gpu-profile-skill/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/license-MIT-yellow?style=flat-square" alt="MIT License">
-  </a>
+  <img src="https://img.shields.io/badge/Claude%20Code-✓-blue?style=flat-square" alt="Claude Code">
+  <img src="https://img.shields.io/badge/Codex-✓-darkgreen?style=flat-square" alt="Codex">
+  <img src="https://img.shields.io/badge/NCU%20%2B%20NSYS-profiling-orange?style=flat-square" alt="NCU + NSYS">
+  <img src="https://img.shields.io/badge/Triton%20%7C%20CUDA%20%7C%20TileLang-multiframework-lightgrey?style=flat-square" alt="Triton, CUDA, TileLang">
 </p>
 
 ---
