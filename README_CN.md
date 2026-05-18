@@ -42,20 +42,24 @@ agent 负责处理环境检查、sudo 权限检测、CUDA 工具路径发现、k
 
 <h3>Sudo 配置（一次性）</h3>
 
-NCU 读取 GPU 硬件性能计数器需要 root 权限，做一次永久配置即可：
+NCU 通过 NVIDIA 内核驱动访问 GPU 硬件性能计数器，驱动默认限制只有 root 能读取。这意味着每次 profiling 要么用 `sudo ncu`，要么一次性调整驱动配置。
+
+永久允许非 root 用户访问：
 
 ```bash
 echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf
 sudo update-initramfs -u
 ```
 
-然后**重启系统**：
+然后重启：
 
 ```bash
 sudo reboot
 ```
 
-重启后验证 `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`，期望输出 `0`。如果跳过此配置，profiling 脚本每次 NCU 调用时会自动使用 sudo。
+重启后验证 `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`，应输出 `0`。
+
+NSYS 不需要 sudo。如果跳过这一步，profiling 脚本会自动回退到 `sudo ncu`。
 
 <h3>安装</h3>
 

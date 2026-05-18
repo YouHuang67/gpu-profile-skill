@@ -42,20 +42,24 @@ The agent handles environment checks, sudo permission detection, CUDA binary dis
 
 <h3>Sudo (one-time)</h3>
 
-NCU reads GPU hardware performance counters, which default to root-only. Fix once:
+NCU accesses GPU hardware performance counters via the NVIDIA kernel driver. By default the driver restricts counter access to root. This means profiling either needs `sudo ncu` every time, or you change the driver policy once.
+
+To allow non-root profiling permanently:
 
 ```bash
 echo 'options nvidia NVreg_RestrictProfilingToAdminUsers=0' | sudo tee /etc/modprobe.d/nvidia-profiling.conf
 sudo update-initramfs -u
 ```
 
-Then **reboot**:
+Then reboot:
 
 ```bash
 sudo reboot
 ```
 
-After reboot, verify: `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly`. Expected output: `0`. If this step is skipped, profiling scripts auto-use sudo at each NCU invocation.
+After reboot verify: `cat /proc/driver/nvidia/params | grep RmProfilingAdminOnly` should print `0`.
+
+NSYS does not need sudo. If you skip this step the profiling scripts fall back to `sudo ncu` automatically.
 
 <h3>Install</h3>
 
